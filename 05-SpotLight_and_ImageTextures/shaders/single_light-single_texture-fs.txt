@@ -1,0 +1,128 @@
+#version 330
+
+// Ambient light intensity
+uniform vec4 ambient_light_color;
+
+// Properties of the point light source
+uniform vec4 light_position; // Light position
+uniform vec4 light_color;    // Light intensity
+
+// Material properties
+uniform vec4 base_color; // Base color
+uniform vec4 diffuse_reflectivity;  // kd (ka)
+uniform vec4 specular_reflectivity; // ks
+uniform float shininess; // Specular exponent
+
+// View matrix
+uniform mat4 view_matrix;
+
+uniform bool enable_diffuse_texture;
+// true ---enable the diffuse texture
+// false---disable the diffuse texture
+
+// The 2D diffuse texture
+uniform sampler2D diffuse_texture;
+
+// Input parameters from the vertex shader
+in vec3 vs_fs_normal_eye; // Normal in eye coordinates
+in vec3 vs_fs_pos_eye;    // Position in eye coordinates
+in vec3 vs_fs_pos;    // Position
+in vec4 vs_fs_color;      // Interpolated vertex color
+in vec2 vs_fs_texcoord;   // Texture coordinates
+
+// Output fragment color
+out vec4 frag_color;
+
+struct SpotLight	//探照灯
+{
+	vec4 position;
+	vec4 color;
+	vec4 direction;	//探照灯光源的中心指向
+	
+	float cut_off_angle;	//裁剪角度
+	float exponent;	//聚光指数
+
+float a0;
+float a1;
+float a2;
+	
+	vec4 ambient;
+	vec4 diffuse;
+	vec4 specular;
+	
+};
+// 探照灯光源
+uniform SpotLight spot_light; 
+vec4 calculateSpotLight(vec4 spot_light_eye, vec3 vs_fs_normal_eye, vec3 vs_fs_pos_eye, vec4 diffuse_reflectivity_effective, vec4 specular_reflectivity)
+{	
+	vec3 N=normalize(vs_fs_normal_eye); // Normal vector
+	vec3 L=normalize(spot_light_eye.xyz-vs_fs_pos_eye); // Direction to light vector
+	vec3 V=-normalize(vs_fs_pos_eye); // Direction to viewer vector
+	vec3 R=reflect(-L, N); // Reflection direction vector
+	
+	float diffuse_factor=max(dot(L, N), 0.0);
+	float specular_factor=pow(max(dot(V, R), 0.0), shininess);
+	float ctheta = dot(-L, normalize((view_matrix*spot_light.direction).xyz));	//注意点乘的向量要全部转到眼坐标
+	float theta = acos(ctheta);
+	
+	
+	if( ctheta < cos(spot_light.cut_off_angle) )	
+	{
+		return vec4(0.0f,0.0f,0.0f,0.0f);
+	}
+	else
+	{
+				
+		vec3 cc=spot_light.position.xyz-vs_fs_pos;
+		float d = sqrt(dot(cc,cc));
+		float linear_attenuation = (1.0f)/( spot_light.a0+spot_light.a1*d+spot_light.a2*d*d);	//探照灯强度线性衰减
+		float angle_attenuation = pow(ctheta, spot_light.exponent);
+		vec4 res=diffuse_reflectivity_effective*spot_light.ambient*linear_attenuation*angle_attenuation // Ambient
+			+diffuse_reflectivity_effective*spot_light.color*diffuse_factor*linear_attenuation*angle_attenuation // Diffuse
+			+specular_reflectivity*spot_light.color*specular_factor*linear_attenuation*angle_attenuation; // Specular
+		
+		//res = spot_light.color * pow(ctheta, spot_light.exponent);	//探照灯强度角向衰减
+
+		return res;
+		
+	}
+}
+
+
+void main(void)
+{
+	// Sample the diffuse texture and use the texture color
+	//   to modulate the diffuse reflectivity if the diffuse texture is enabled
+	vec4 diffuse_reflectivity_effective=diffuse_reflectivity;
+	if (enable_diffuse_texture)
+	{
+		vec4 tex_color=texture(diffuse_texture, vs_fs_texcoord);
+		diffuse_reflectivity_effective*=tex_color;
+	}
+	
+	// Transform light position from world coordinates to eye coordinates
+	vec4 P_light_eye=view_matrix*light_position;
+
+	// Calculate unit vectors needed for lighting calculations
+	vec3 N=normalize(vs_fs_normal_eye); // Normal vector
+	vec3 L=normalize(P_light_eye.xyz-vs_fs_pos_eye); // Direction to light vector
+	vec3 V=-normalize(vs_fs_pos_eye); // Direction to viewer vector
+	vec3 R=reflect(-L, N); // Reflection direction vector
+
+	float diffuse_factor=max(dot(L, N), 0.0);
+	float specular_factor=pow(max(dot(V, R), 0.0), shininess);
+
+	// Add lighting contributions from different reflection types
+	vec4 color_t=
+		diffuse_reflectivity_effective*ambient_light_color // Ambient
+		+diffuse_reflectivity_effective*light_color*diffuse_factor // Diffuse
+		+specular_reflectivity*light_color*specular_factor; // Specular
+
+	// 探照灯光源位置的眼坐标
+	vec4 S_light_eye=view_matrix*spot_light.position;
+	// 计算探照灯光源，返回探照灯光源形成的颜色
+	vec4 color_s = calculateSpotLight(S_light_eye, vs_fs_normal_eye, vs_fs_pos_eye, diffuse_reflectivity_effective, specular_reflectivity);
+	
+	// Modulate the result with the base color and the interpolated vertex color
+	frag_color=vs_fs_color*base_color*(color_s+color_t);
+}
