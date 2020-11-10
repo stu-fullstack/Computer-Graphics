@@ -1,0 +1,51 @@
+#version 330
+
+// Vertex attributes
+layout(location=0) in vec4 position;
+layout(location=1) in vec4 color;
+layout(location=2) in vec3 normal;
+layout(location=3) in vec2 texcoord;
+
+// Transformation matrices
+uniform mat4 model_matrix;
+uniform mat4 view_matrix;
+uniform mat4 projection_matrix;
+uniform mat3 normal_matrix;
+
+uniform bool isEnvirmomentObj;	//当前所画物体是否是环境对象，此例只有立方体纹理是环境对象
+
+// Output parameters passed to the fragment shader
+out vec3 vs_fs_normal_eye; // Normal in eye coordinates
+out vec3 vs_fs_normal; // Normal
+out vec3 vs_fs_pos_eye;    // Position in eye coordinates
+out vec3 vs_fs_pos;    // Position
+out vec4 vs_fs_color;      // Color
+out vec2 vs_fs_texcoord;   // Texture coordinates
+
+void main(void)
+{
+	// Calculate position in eye coordinates
+	vec4 P_eye=view_matrix*(model_matrix*position);
+
+	// Calculate position in clip coordinates
+	vec4 pos = projection_matrix*P_eye;
+	
+	if(!isEnvirmomentObj) gl_Position=pos;	//非环境物体对象
+	else gl_Position=pos.xyww;		//立方体纹理环境，让其始终以观察者为中心。
+		
+	// Output position in eye coordinates
+	vs_fs_pos_eye=P_eye.xyz;
+	vs_fs_pos = position.xyz;
+
+	// Calculate and output normal in eye coordinates
+	vec4 N_h=view_matrix*vec4(normal_matrix*normal, 0.0);
+	vs_fs_normal_eye=N_h.xyz;
+	vs_fs_normal=normal;
+
+	// Output color
+	vs_fs_color=color;
+
+	// Output texture coordinates
+	vs_fs_texcoord=texcoord;
+	
+}
