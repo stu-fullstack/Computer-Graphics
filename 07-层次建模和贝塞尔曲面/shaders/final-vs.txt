@@ -1,0 +1,41 @@
+#version 420 core
+
+// Vertex attributes
+layout(location=0) in vec4 position;
+layout(location=1) in vec4 color;
+layout(location=2) in vec3 normal;
+layout(location=3) in vec2 texcoord;
+
+// Transformation matrices
+uniform mat4 model_matrix;
+uniform mat4 view_matrix;
+uniform mat4 projection_matrix;
+uniform mat3 normal_matrix;
+
+// Output parameters passed to the fragment shader
+out vec3 vs_fs_normal_eye; // Normal in eye coordinates
+out vec3 vs_fs_pos_eye;    // Position in eye coordinates
+out vec4 vs_fs_color;      // Color
+out vec2 vs_fs_texcoord;   // Texture coordinates
+
+void main(void)
+{
+	// Calculate position in eye coordinates
+	vec4 P_eye=view_matrix*(model_matrix*position);
+
+	// Calculate position in clip coordinates
+	gl_Position=projection_matrix*P_eye;
+
+	// Output position in eye coordinates
+	vs_fs_pos_eye=P_eye.xyz;
+
+	// Calculate and output normal in eye coordinates
+	vec4 N_h=view_matrix*vec4(normal_matrix*normal, 0.0);
+	vs_fs_normal_eye=N_h.xyz;
+
+	// Output color
+	vs_fs_color=color;
+
+	// Output texture coordinates
+	vs_fs_texcoord=texcoord;
+}

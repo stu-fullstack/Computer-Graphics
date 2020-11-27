@@ -1,0 +1,67 @@
+#version 420 core
+
+// Ambient light intensity
+uniform vec4 ambient_light_color;
+
+// Properties of the point light source
+uniform vec4 light_position; // Light position
+uniform vec4 light_color;    // Light intensity
+
+// Material properties
+uniform vec4 base_color; // Base color
+uniform vec4 diffuse_reflectivity;  // kd (ka)
+uniform vec4 specular_reflectivity; // ks
+uniform float shininess; // Specular exponent
+
+// View matrix
+uniform mat4 view_matrix;
+
+uniform bool enable_diffuse_texture;
+// true ---enable the diffuse texture
+// false---disable the diffuse texture
+
+// The 2D diffuse texture
+uniform sampler2D diffuse_texture;
+uniform samplerCube cube_texture;
+
+// Input parameters from the vertex shader
+in vec3 vs_fs_normal_eye; // Normal in eye coordinates
+in vec3 vs_fs_pos_eye;    // Position in eye coordinates
+in vec4 vs_fs_color;      // Interpolated vertex color
+in vec2 vs_fs_texcoord;   // Texture coordinates
+
+// Output fragment color
+out vec4 frag_color;
+
+void main(void)
+{
+	// Sample the diffuse texture and use the texture color
+	//   to modulate the diffuse reflectivity if the diffuse texture is enabled
+	vec4 diffuse_reflectivity_effective=diffuse_reflectivity;
+	if (enable_diffuse_texture)
+	{
+		vec4 tex_color=texture(diffuse_texture, vs_fs_texcoord);
+		diffuse_reflectivity_effective*=tex_color;
+	}
+	
+	// Transform light position from world coordinates to eye coordinates
+	vec4 P_light_eye=view_matrix*light_position;
+
+	// Calculate unit vectors needed for lighting calculations
+	vec3 N=normalize(vs_fs_normal_eye); // Normal vector
+	vec3 L=normalize(P_light_eye.xyz-vs_fs_pos_eye); // Direction to light vector
+	vec3 V=-normalize(vs_fs_pos_eye); // Direction to viewer vector
+	vec3 R=reflect(-L, N); // Reflection direction vector
+
+	float diffuse_factor=max(dot(L, N), 0.0);
+	float specular_factor=pow(max(dot(V, R), 0.0), shininess);
+
+	// Add lighting contributions from different reflection types
+	vec4 color_t=
+		diffuse_reflectivity_effective*ambient_light_color // Ambient
+		+diffuse_reflectivity_effective*light_color*diffuse_factor // Diffuse
+		+specular_reflectivity*light_color*specular_factor; // Specular
+
+	// Modulate the result with the base color and the interpolated vertex color
+	frag_color=vs_fs_color*base_color*color_t;
+}
